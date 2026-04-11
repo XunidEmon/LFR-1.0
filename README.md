@@ -1,237 +1,162 @@
-# 🛠️ Line Follower Robot using Arduino (PID Controlled)
+# 🛠️ Line Follower Robot using Arduino (5-Sensor | L293D)
 
-This project is a **PID-based Line Follower Robot** built with Arduino UNO, 5-channel IR sensor array, and L293D motor driver. Optimized for stability and smooth path tracking.
+This project is a **simple 5-sensor Line Follower Robot** built with Arduino UNO, 5-channel IR sensor array, and L293D motor driver.  
+**No PID** — just clean if-else logic for beginners.
 
 ---
 
 ## 🚗 Hardware Components
 
-- ✅ Arduino UNO
-- ✅ L293D Motor Driver
-- ✅ 2 × 12V DC Gear Motors (500 RPM)
-- ✅ 5-Channel IR Sensor Array (connected to A1–A5)
-- ✅ External Battery (12V for motors, 5V regulated for sensors/Arduino)
-- ✅ Jumper wires, Breadboard or PCB
-- ✅ Chassis, Wheels
+- Arduino UNO / Nano / Mega
+- L293D Motor Driver
+- 2 × 12V DC Gear Motors (100–200 RPM recommended)
+- 5-Channel IR Sensor Array
+- 12V Battery (for motors)
+- 5V Regulator (for sensors/Arduino)
+- Chassis, Wheels, Jumper Wires
 
 ---
 
-## ⚙️ Motor Pin Configuration
+## ⚙️ Motor Pin Configuration (L293D)
 
-| Component       | Pin |
-|----------------|-----|
-| Left Motor IN1 | 7   |
-| Left Motor IN2 | 8   |
-| Left Motor ENA | 3 (PWM) |
-| Right Motor IN3| 12  |
-| Right Motor IN4| 13  |
-| Right Motor ENB| 5 (PWM) |
+| Motor Driver Pin | Arduino Pin | Description        |
+|------------------|-------------|--------------------|
+| Left Motor IN1   | 7           | Left motor direction 1 |
+| Left Motor IN2   | 8           | Left motor direction 2 |
+| Left Motor ENA   | 5 (PWM)     | Left motor speed      |
+| Right Motor IN3  | 9           | Right motor direction 1 |
+| Right Motor IN4  | 10          | Right motor direction 2 |
+| Right Motor ENB  | 6 (PWM)     | Right motor speed     |
 
 ---
 
 ## 🔧 Sensor Pin Configuration
 
-| IR Sensor | Arduino Analog Pin |
-|----------|---------------------|
-| Sensor 1 (Leftmost)  | A1 |
-| Sensor 2             | A2 |
-| Sensor 3 (Middle)    | A3 |
-| Sensor 4             | A4 |
-| Sensor 5 (Rightmost) | A5 |
+| IR Sensor         | Arduino Pin |
+|-------------------|-------------|
+| Sensor 1 (Leftmost) | A0          |
+| Sensor 2 (Left)     | A1          |
+| Sensor 3 (Center)   | A2          |
+| Sensor 4 (Right)    | A3          |
+| Sensor 5 (Rightmost)| A4          |
 
 ---
 
-## 🎛️ PID Controller Parameters
+## 📌 Calibration Code (Find Threshold)
+
+Use this code to find the correct threshold value for your sensors.
 
 ```cpp
-float Kp = 10.0;
-float Ki = 0.0;
-float Kd = 15.0;
-// মোটরের পিন
-int in1 = 7;
-int in2 = 8;
-int Ena = 3;
-
-int in3 = 12;
-int in4 = 13;
-int Enb = 5;
-
-// সেন্সর পিন
-int s1 = A1;
-int s2 = A2;
-int s3 = A3;
-int s4 = A4;
-int s5 = A5;
-
-// কনফিগারেশন
-int threshold = 550;
-
-// PID variables
-float Kp = 10.0;
-float Ki = 0.0;
-float Kd = 15.0;
-
-float error = 0, previousError = 0, integral = 0;
-int baseSpeed = 40;
-int maxSpeed = 60;
+int s1 = A0, s2 = A1, s3 = A2, s4 = A3, s5 = A4;
 
 void setup() {
   Serial.begin(9600);
-
-  pinMode(in1, OUTPUT); pinMode(in2, OUTPUT); pinMode(Ena, OUTPUT);
-  pinMode(in3, OUTPUT); pinMode(in4, OUTPUT); pinMode(Enb, OUTPUT);
-
-  pinMode(s1, INPUT); pinMode(s2, INPUT); pinMode(s3, INPUT);
-  pinMode(s4, INPUT); pinMode(s5, INPUT);
 }
 
 void loop() {
-  int IR1 = analogRead(s1);
-  int IR2 = analogRead(s2);
-  int IR3 = analogRead(s3);
-  int IR4 = analogRead(s4);
-  int IR5 = analogRead(s5);
+  int v1 = analogRead(s1);
+  int v2 = analogRead(s2);
+  int v3 = analogRead(s3);
+  int v4 = analogRead(s4);
+  int v5 = analogRead(s5);
 
-  bool L1 = IR1 < threshold;
-  bool L2 = IR2 < threshold;
-  bool L3 = IR3 < threshold;
-  bool L4 = IR4 < threshold;
-  bool L5 = IR5 < threshold;
+  int avg = (v1 + v2 + v3 + v4 + v5) / 5;
 
-  // Position Calculation (weighted sum)
-  int position = 0;
-  int activeSensors = 0;
+  Serial.print(v1); Serial.print(" ");
+  Serial.print(v2); Serial.print(" ");
+  Serial.print(v3); Serial.print(" ");
+  Serial.print(v4); Serial.print(" ");
+  Serial.print(v5); Serial.print(" | Avg: ");
+  Serial.println(avg);
 
-  if (L1) { position += -2; activeSensors++; }
-  if (L2) { position += -1; activeSensors++; }
-  if (L3) { position +=  0; activeSensors++; }
-  if (L4) { position +=  1; activeSensors++; }
-  if (L5) { position +=  2; activeSensors++; }
-
-  if (activeSensors > 0)
-    error = (float)position / activeSensors;
-  else
-    error = previousError;
-
-  integral += error;
-  float derivative = error - previousError;
-  float correction = Kp * error + Ki * integral + Kd * derivative;
-
-  int leftSpeed = baseSpeed + correction;
-  int rightSpeed = baseSpeed - correction;
-
-  // Speed limit clamp
-  leftSpeed = constrain(leftSpeed, 0, maxSpeed);
-  rightSpeed = constrain(rightSpeed, 0, maxSpeed);
-
-  analogWrite(Ena, leftSpeed);
-  analogWrite(Enb, rightSpeed);
-
-  digitalWrite(in1, HIGH); digitalWrite(in2, LOW);
-  digitalWrite(in3, HIGH); digitalWrite(in4, LOW);
-
-  previousError = error;
-
-  // Debugging info
-  Serial.print("Error: "); Serial.print(error);
-  Serial.print(" | Lspeed: "); Serial.print(leftSpeed);
-  Serial.print(" Rspeed: "); Serial.println(rightSpeed);
-
-  delay(30); // smoother behavior
+  delay(500);
 }
 
 
 
-///new code
-// মোটরের পিন
-int in1 = 7;
-int in2 = 8;
-int Ena = 3;
 
-int in3 = 12;
-int in4 = 13;
-int Enb = 5;
 
-// সেন্সর পিন
-int s1 = A1;
-int s2 = A2;
-int s3 = A3;
-int s4 = A4;
-int s5 = A5;
+🤖 Main LFR Code (Simple If-Else Logic)
 
-// কনফিগারেশন
-int threshold = 550;
+// 5-Sensor Line Follower Robot (Simple)
+// Sensor pins
+int s1 = A0;  // Leftmost
+int s2 = A1;  // Left
+int s3 = A2;  // Center
+int s4 = A3;  // Right
+int s5 = A4;  // Rightmost
 
-// PID variables
-float Kp = 12.0;
-float Ki = 0.0;
-float Kd = 20.0;
+// Motor pins
+int lm1 = 7;   // Left motor pin 1
+int lm2 = 8;   // Left motor pin 2
+int lpwm = 5;  // Left speed (PWM)
+int rm1 = 9;   // Right motor pin 1
+int rm2 = 10;  // Right motor pin 2
+int rpwm = 6;  // Right speed (PWM)
 
-float error = 0, previousError = 0, integral = 0;
-int baseSpeed = 40;
-int maxSpeed = 50;
+int th = 500;  // Threshold (below = black line)
 
 void setup() {
-  Serial.begin(9600);
-
-  pinMode(in1, OUTPUT); pinMode(in2, OUTPUT); pinMode(Ena, OUTPUT);
-  pinMode(in3, OUTPUT); pinMode(in4, OUTPUT); pinMode(Enb, OUTPUT);
-
   pinMode(s1, INPUT); pinMode(s2, INPUT); pinMode(s3, INPUT);
   pinMode(s4, INPUT); pinMode(s5, INPUT);
+
+  pinMode(lm1, OUTPUT); pinMode(lm2, OUTPUT); pinMode(lpwm, OUTPUT);
+  pinMode(rm1, OUTPUT); pinMode(rm2, OUTPUT); pinMode(rpwm, OUTPUT);
 }
 
 void loop() {
-  int IR1 = analogRead(s1);
-  int IR2 = analogRead(s2);
-  int IR3 = analogRead(s3);
-  int IR4 = analogRead(s4);
-  int IR5 = analogRead(s5);
+  int v1 = analogRead(s1);
+  int v2 = analogRead(s2);
+  int v3 = analogRead(s3);
+  int v4 = analogRead(s4);
+  int v5 = analogRead(s5);
 
-  bool L1 = IR1 < threshold;
-  bool L2 = IR2 < threshold;
-  bool L3 = IR3 < threshold;
-  bool L4 = IR4 < threshold;
-  bool L5 = IR5 < threshold;
+  int L1 = (v1 < th) ? 1 : 0;
+  int L2 = (v2 < th) ? 1 : 0;
+  int L3 = (v3 < th) ? 1 : 0;
+  int L4 = (v4 < th) ? 1 : 0;
+  int L5 = (v5 < th) ? 1 : 0;
 
-  int position = 0;
-  int activeSensors = 0;
+  if (L3 == 1) forward();
+  else if (L2 == 1) left();
+  else if (L4 == 1) right();
+  else if (L1 == 1) hardLeft();
+  else if (L5 == 1) hardRight();
+  else stop();
+}
 
-  if (L1) { position += -2; activeSensors++; }
-  if (L2) { position += -1; activeSensors++; }
-  if (L3) { position +=  0; activeSensors++; }
-  if (L4) { position +=  1; activeSensors++; }
-  if (L5) { position +=  2; activeSensors++; }
+void forward() {
+  digitalWrite(lm1, HIGH); digitalWrite(lm2, LOW);
+  digitalWrite(rm1, HIGH); digitalWrite(rm2, LOW);
+  analogWrite(lpwm, 150); analogWrite(rpwm, 150);
+}
 
-  if (activeSensors > 0) {
-    error = (float)position / activeSensors;
-  } else {
-    // No sensors detecting line, use last error
-    error = previousError;
-  }
+void left() {
+  digitalWrite(lm1, LOW); digitalWrite(lm2, HIGH);
+  digitalWrite(rm1, HIGH); digitalWrite(rm2, LOW);
+  analogWrite(lpwm, 100); analogWrite(rpwm, 100);
+}
 
-  integral += error;
-  float derivative = error - previousError;
-  float correction = Kp * error + Ki * integral + Kd * derivative;
+void right() {
+  digitalWrite(lm1, HIGH); digitalWrite(lm2, LOW);
+  digitalWrite(rm1, LOW); digitalWrite(rm2, HIGH);
+  analogWrite(lpwm, 100); analogWrite(rpwm, 100);
+}
 
-  // Adjust left motor speed to be slower
-  int leftSpeed = baseSpeed + correction - 10;  // Decrease left motor speed
-  int rightSpeed = baseSpeed - correction;
+void hardLeft() {
+  digitalWrite(lm1, LOW); digitalWrite(lm2, HIGH);
+  digitalWrite(rm1, HIGH); digitalWrite(rm2, LOW);
+  analogWrite(lpwm, 120); analogWrite(rpwm, 120);
+}
 
-  leftSpeed = constrain(leftSpeed, 0, maxSpeed);
-  rightSpeed = constrain(rightSpeed, 0, maxSpeed);
+void hardRight() {
+  digitalWrite(lm1, HIGH); digitalWrite(lm2, LOW);
+  digitalWrite(rm1, LOW); digitalWrite(rm2, HIGH);
+  analogWrite(lpwm, 120); analogWrite(rpwm, 120);
+}
 
-  analogWrite(Ena, leftSpeed);
-  analogWrite(Enb, rightSpeed);
-
-  digitalWrite(in1, HIGH); digitalWrite(in2, LOW);
-  digitalWrite(in3, HIGH); digitalWrite(in4, LOW);
-
-  previousError = error;
-
-  Serial.print("Err: "); Serial.print(error);
-  Serial.print(" | L: "); Serial.print(leftSpeed);
-  Serial.print(" R: "); Serial.println(rightSpeed);
-
-  delay(25);
+void stop() {
+  digitalWrite(lm1, LOW); digitalWrite(lm2, LOW);
+  digitalWrite(rm1, LOW); digitalWrite(rm2, LOW);
+  analogWrite(lpwm, 0); analogWrite(rpwm, 0);
 }
